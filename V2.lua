@@ -21,20 +21,17 @@ local Settings = {
     Distance = 25,
     HitboxEnabled = false,
     HitboxSize = 10,
-    WhitelistEnabled = false,
     TeleportEnabled = false,
     NoclipEnabled = false,
     AimEnabled = false,
     AimSmoothness = 5,
     AimMaxDistance = 200,
     AimCheckWall = true,
-    AimWhitelist = false,
     ESPEnabled = false,
     ESPShowName = true,
     ESPShowJob = true,
 }
 
-local Whitelist = {}
 local affectedHeads = {}
 local frameCount = 0
 local isDestroyed = false
@@ -125,14 +122,12 @@ local function CreateESP(player)
     billboard.AlwaysOnTop = true
     billboard.Parent = head
     
-    -- ★★★ 不要背景，完全透明 ★★★
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(1, 0, 1, 0)
     frame.BackgroundTransparency = 1
     frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
     frame.Parent = billboard
     
-    -- 名字标签（队伍颜色，居中）
     local nameLabel = Instance.new("TextLabel")
     nameLabel.Size = UDim2.new(1, 0, 0, 26)
     nameLabel.Position = UDim2.new(0, 0, 0, 0)
@@ -145,7 +140,6 @@ local function CreateESP(player)
     nameLabel.TextYAlignment = Enum.TextYAlignment.Center
     nameLabel.Parent = frame
     
-    -- 职业标签（职业颜色，居中）
     local jobLabel = Instance.new("TextLabel")
     jobLabel.Size = UDim2.new(1, 0, 0, 22)
     jobLabel.Position = UDim2.new(0, 0, 0, 28)
@@ -364,7 +358,6 @@ local function DoAim()
     for _, p in ipairs(Players:GetPlayers()) do
         if p == player then continue end
         if not p.Character then continue end
-        if Settings.AimWhitelist and Whitelist[p.UserId] then continue end
         local head = p.Character:FindFirstChild("Head")
         if not head then continue end
         local distance = (head.Position - camera.CFrame.Position).Magnitude
@@ -395,19 +388,16 @@ function ApplyHitbox()
     for i = 1, #players do
         local player = players[i]
         if player ~= LocalPlayer and player.Character then
-            if Settings.WhitelistEnabled and Whitelist[player.UserId] then
-            else
-                local char = player.Character
-                local head = char:FindFirstChild("Head")
-                local hum = char:FindFirstChildOfClass("Humanoid")
-                if hum and hum.Health > 0 and head then
-                    head.Size = Vector3.new(Settings.HitboxSize, Settings.HitboxSize, Settings.HitboxSize)
-                    head.Transparency = 1
-                    head.Color = Color3.fromRGB(255, 215, 0)
-                    head.Material = Enum.Material.Neon
-                    head.CanCollide = false
-                    newAffected[head] = true
-                end
+            local char = player.Character
+            local head = char:FindFirstChild("Head")
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hum and hum.Health > 0 and head then
+                head.Size = Vector3.new(Settings.HitboxSize, Settings.HitboxSize, Settings.HitboxSize)
+                head.Transparency = 1
+                head.Color = Color3.fromRGB(255, 215, 0)
+                head.Material = Enum.Material.Neon
+                head.CanCollide = false
+                newAffected[head] = true
             end
         end
     end
@@ -434,22 +424,6 @@ function ResetHitbox()
         end
     end
     affectedHeads = {}
-end
-
-function UpdateWhitelist()
-    if isDestroyed then return end
-    Whitelist = {}
-    local players = Players:GetPlayers()
-    for i = 1, #players do
-        local player = players[i]
-        if player ~= LocalPlayer then
-            pcall(function()
-                if player:IsFriendsWith(LocalPlayer.UserId) then
-                    Whitelist[player.UserId] = true
-                end
-            end)
-        end
-    end
 end
 
 -- ====== 3. 创建 Obsidian UI ======
@@ -537,15 +511,6 @@ mainRightGroup:AddSlider("HitboxSize", {
     end
 })
 
-mainRightGroup:AddToggle("WhitelistToggle", {
-    Text = "好友检测 (白名单)",
-    Default = false,
-    Callback = function(value)
-        Settings.WhitelistEnabled = value
-        if value then UpdateWhitelist() end
-    end
-})
-
 -- ====== 自瞄功能 ======
 local aimGroup = Tabs.Main:AddRightGroupbox("自瞄功能", "crosshair")
 
@@ -586,14 +551,6 @@ aimGroup:AddToggle("AimCheckWall", {
     Default = true,
     Callback = function(value)
         Settings.AimCheckWall = value
-    end
-})
-
-aimGroup:AddToggle("AimWhitelist", {
-    Text = "自瞄跳过好友",
-    Default = false,
-    Callback = function(value)
-        Settings.AimWhitelist = value
     end
 })
 
@@ -756,9 +713,6 @@ local function onPlayerAdded(player)
             ApplyNoclip()
         end
     end)
-    if Settings.WhitelistEnabled and not isDestroyed then
-        UpdateWhitelist()
-    end
 end
 
 for _, player in ipairs(Players:GetPlayers()) do
@@ -811,9 +765,6 @@ table.insert(connections, renderCon)
 task.spawn(function()
     while not isDestroyed do
         task.wait(10)
-        if Settings.WhitelistEnabled and not isDestroyed then
-            UpdateWhitelist()
-        end
         if Settings.ESPEnabled then
             for _, player in ipairs(Players:GetPlayers()) do
                 if player ~= LocalPlayer and player.Character then
