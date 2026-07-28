@@ -24,6 +24,14 @@ local Settings = {
     WhitelistEnabled = false,
     TeleportEnabled = false,
     NoclipEnabled = false,
+    AimEnabled = false,
+    AimSmoothness = 5,
+    AimMaxDistance = 200,
+    AimCheckWall = true,
+    AimWhitelist = false,
+    ESPEnabled = false,
+    ESPShowName = true,
+    ESPShowJob = true,
 }
 
 local Whitelist = {}
@@ -32,6 +40,199 @@ local frameCount = 0
 local isDestroyed = false
 local connections = {}
 local noclipConnections = {}
+
+-- ====== ★★★ 职业颜色映射 ★★★ ======
+local JobColors = {
+    ["警察"] = Color3.fromRGB(0, 100, 255),
+    ["医生"] = Color3.fromRGB(0, 200, 0),
+    ["消防员"] = Color3.fromRGB(255, 50, 0),
+    ["军人"] = Color3.fromRGB(50, 150, 50),
+    ["黑帮"] = Color3.fromRGB(150, 0, 150),
+    ["平民"] = Color3.fromRGB(200, 200, 200),
+    ["圣奥里公民"] = Color3.fromRGB(200, 200, 200),
+    ["银行家"] = Color3.fromRGB(0, 200, 200),
+    ["市长"] = Color3.fromRGB(255, 200, 0),
+    ["记者"] = Color3.fromRGB(255, 150, 0),
+    ["律师"] = Color3.fromRGB(150, 100, 200),
+    ["囚犯"] = Color3.fromRGB(255, 150, 0),
+    ["狱警"] = Color3.fromRGB(0, 150, 255),
+    ["司机"] = Color3.fromRGB(100, 200, 255),
+    ["厨师"] = Color3.fromRGB(255, 100, 0),
+    ["建筑工"] = Color3.fromRGB(255, 200, 50),
+    ["农民"] = Color3.fromRGB(50, 200, 50),
+    ["矿工"] = Color3.fromRGB(200, 150, 100),
+    ["渔夫"] = Color3.fromRGB(0, 150, 200),
+    ["商人"] = Color3.fromRGB(255, 150, 200),
+    ["学生"] = Color3.fromRGB(100, 100, 255),
+    ["老师"] = Color3.fromRGB(200, 100, 50),
+    ["工程师"] = Color3.fromRGB(255, 100, 100),
+    ["科学家"] = Color3.fromRGB(0, 255, 150),
+    ["飞行员"] = Color3.fromRGB(50, 200, 255),
+    ["快递员"] = Color3.fromRGB(255, 180, 0),
+    ["公交车司机"] = Color3.fromRGB(0, 180, 255),
+    ["送货"] = Color3.fromRGB(255, 100, 50),
+    ["转运"] = Color3.fromRGB(0, 200, 150),
+    ["货物"] = Color3.fromRGB(150, 100, 0),
+    ["医疗服务工作人员"] = Color3.fromRGB(0, 220, 100),
+}
+
+-- ====== ★★★ 透视功能 ★★★ ======
+local espBillboards = {}
+local espConnections = {}
+
+local function GetPlayerTeamColor(player)
+    local team = player.Team
+    if team then
+        return team.TeamColor.Color
+    end
+    return Color3.fromRGB(255, 255, 255)
+end
+
+local function GetPlayerJob(player)
+    if player.Team then
+        return player.Team.Name
+    end
+    return "平民"
+end
+
+local function GetJobColor(jobName)
+    return JobColors[jobName] or Color3.fromRGB(200, 200, 200)
+end
+
+local function CreateESP(player)
+    if isDestroyed then return end
+    if not player.Character then return end
+    if player == LocalPlayer then return end
+    
+    local head = player.Character:FindFirstChild("Head")
+    if not head then return end
+    
+    if espBillboards[player.UserId] then
+        return
+    end
+    
+    local name = player.Name
+    local job = GetPlayerJob(player)
+    local teamColor = GetPlayerTeamColor(player)
+    local jobColor = GetJobColor(job)
+    
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "ESP_" .. player.UserId
+    billboard.Adornee = head
+    billboard.Size = UDim2.new(0, 300, 0, 60)
+    billboard.StudsOffset = Vector3.new(0, 2.8, 0)
+    billboard.MaxDistance = 500
+    billboard.AlwaysOnTop = true
+    billboard.Parent = head
+    
+    -- ★★★ 不要背景，完全透明 ★★★
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, 0, 1, 0)
+    frame.BackgroundTransparency = 1
+    frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    frame.Parent = billboard
+    
+    -- 名字标签（队伍颜色，居中）
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Size = UDim2.new(1, 0, 0, 26)
+    nameLabel.Position = UDim2.new(0, 0, 0, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = name
+    nameLabel.TextColor3 = teamColor
+    nameLabel.TextSize = 18
+    nameLabel.Font = Enum.Font.GothamBold
+    nameLabel.TextXAlignment = Enum.TextXAlignment.Center
+    nameLabel.TextYAlignment = Enum.TextYAlignment.Center
+    nameLabel.Parent = frame
+    
+    -- 职业标签（职业颜色，居中）
+    local jobLabel = Instance.new("TextLabel")
+    jobLabel.Size = UDim2.new(1, 0, 0, 22)
+    jobLabel.Position = UDim2.new(0, 0, 0, 28)
+    jobLabel.BackgroundTransparency = 1
+    jobLabel.Text = job
+    jobLabel.TextColor3 = jobColor
+    jobLabel.TextSize = 16
+    jobLabel.Font = Enum.Font.GothamBold
+    jobLabel.TextXAlignment = Enum.TextXAlignment.Center
+    jobLabel.TextYAlignment = Enum.TextYAlignment.Center
+    jobLabel.Parent = frame
+    
+    espBillboards[player.UserId] = {
+        Billboard = billboard,
+        Frame = frame,
+        NameLabel = nameLabel,
+        JobLabel = jobLabel,
+    }
+    
+    local con
+    con = player.AncestryChanged:Connect(function()
+        if not player.Parent or not player.Character then
+            RemoveESP(player.UserId)
+            if con then
+                con:Disconnect()
+            end
+        end
+    end)
+    table.insert(espConnections, con)
+end
+
+local function RemoveESP(userId)
+    local data = espBillboards[userId]
+    if data then
+        if data.Billboard then
+            data.Billboard:Destroy()
+        end
+        espBillboards[userId] = nil
+    end
+end
+
+local function UpdateESPVisibility()
+    for userId, data in pairs(espBillboards) do
+        if data.NameLabel then
+            data.NameLabel.Visible = Settings.ESPShowName
+        end
+        if data.JobLabel then
+            data.JobLabel.Visible = Settings.ESPShowJob
+        end
+        if data.Billboard then
+            data.Billboard.Enabled = Settings.ESPEnabled
+        end
+    end
+end
+
+local function UpdateAllESP()
+    if not Settings.ESPEnabled then
+        for userId, data in pairs(espBillboards) do
+            if data.Billboard then
+                data.Billboard.Enabled = false
+            end
+        end
+        return
+    end
+    
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            if not espBillboards[player.UserId] then
+                CreateESP(player)
+            else
+                local data = espBillboards[player.UserId]
+                local job = GetPlayerJob(player)
+                if data.NameLabel then
+                    data.NameLabel.Text = player.Name
+                    data.NameLabel.TextColor3 = GetPlayerTeamColor(player)
+                end
+                if data.JobLabel then
+                    data.JobLabel.Text = job
+                    data.JobLabel.TextColor3 = GetJobColor(job)
+                end
+                if data.Billboard then
+                    data.Billboard.Enabled = true
+                end
+            end
+        end
+    end
+end
 
 -- ====== 传送点数据 ======
 local function GetTeleportData()
@@ -125,6 +326,68 @@ local function ToggleNoclip(state)
     end
 end
 
+-- ====== 自瞄 ======
+local function IsPlayerVisible(targetHead)
+    if not Settings.AimCheckWall then return true end
+    local camera = workspace.CurrentCamera
+    if not camera then return true end
+    local origin = camera.CFrame.Position
+    local direction = (targetHead.Position - origin).Unit
+    local distance = (targetHead.Position - origin).Magnitude
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+    raycastParams.FilterDescendantsInstances = {LocalPlayer.Character}
+    local result = workspace:Raycast(origin, direction * distance, raycastParams)
+    if result then
+        local hitPart = result.Instance
+        if hitPart and hitPart:IsDescendantOf(targetHead.Parent) then
+            return true
+        else
+            return false
+        end
+    end
+    return true
+end
+
+local function DoAim()
+    if not Settings.AimEnabled or isDestroyed then return end
+    local camera = workspace.CurrentCamera
+    if not camera then return end
+    local player = LocalPlayer
+    local char = player.Character
+    if not char then return end
+    local screenCenter = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
+    local circleRadius = 200
+    local maxDistance = Settings.AimMaxDistance
+    local bestTarget = nil
+    local bestDist = math.huge
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p == player then continue end
+        if not p.Character then continue end
+        if Settings.AimWhitelist and Whitelist[p.UserId] then continue end
+        local head = p.Character:FindFirstChild("Head")
+        if not head then continue end
+        local distance = (head.Position - camera.CFrame.Position).Magnitude
+        if distance > maxDistance then continue end
+        local pos, onScreen = camera:WorldToScreenPoint(head.Position)
+        if not onScreen then continue end
+        if not IsPlayerVisible(head) then continue end
+        local screenPos = Vector2.new(pos.X, pos.Y)
+        local dist = (screenPos - screenCenter).Magnitude
+        if dist <= circleRadius and dist < bestDist then
+            bestDist = dist
+            bestTarget = head
+        end
+    end
+    if bestTarget then
+        local targetPos = bestTarget.Position
+        local targetCFrame = CFrame.lookAt(camera.CFrame.Position, targetPos)
+        local smoothFactor = 1 / (Settings.AimSmoothness + 1)
+        local newCFrame = camera.CFrame:Lerp(targetCFrame, smoothFactor)
+        camera.CFrame = newCFrame
+    end
+end
+
 function ApplyHitbox()
     if isDestroyed or not Settings.HitboxEnabled then return end
     local players = Players:GetPlayers()
@@ -192,7 +455,7 @@ end
 -- ====== 3. 创建 Obsidian UI ======
 local Window = Library:CreateWindow({
     Title = "SANA HUB",
-    Footer = "稳定版 - Obsidian UI",
+    Footer = "稳定版",
     Icon = 95816097006870,
     NotifySide = "Right",
     ShowCustomCursor = true,
@@ -280,6 +543,97 @@ mainRightGroup:AddToggle("WhitelistToggle", {
     Callback = function(value)
         Settings.WhitelistEnabled = value
         if value then UpdateWhitelist() end
+    end
+})
+
+-- ====== 自瞄功能 ======
+local aimGroup = Tabs.Main:AddRightGroupbox("自瞄功能", "crosshair")
+
+aimGroup:AddToggle("AimToggle", {
+    Text = "启用自瞄",
+    Default = false,
+    Callback = function(value)
+        Settings.AimEnabled = value
+    end
+})
+
+aimGroup:AddSlider("AimSmoothness", {
+    Text = "平滑度",
+    Default = 5,
+    Min = 1,
+    Max = 20,
+    Rounding = 0,
+    Suffix = "",
+    Callback = function(value)
+        Settings.AimSmoothness = value
+    end
+})
+
+aimGroup:AddSlider("AimMaxDistance", {
+    Text = "检测距离",
+    Default = 200,
+    Min = 50,
+    Max = 500,
+    Rounding = 0,
+    Suffix = "单位",
+    Callback = function(value)
+        Settings.AimMaxDistance = value
+    end
+})
+
+aimGroup:AddToggle("AimCheckWall", {
+    Text = "墙壁检测",
+    Default = true,
+    Callback = function(value)
+        Settings.AimCheckWall = value
+    end
+})
+
+aimGroup:AddToggle("AimWhitelist", {
+    Text = "自瞄跳过好友",
+    Default = false,
+    Callback = function(value)
+        Settings.AimWhitelist = value
+    end
+})
+
+-- ====== ★★★ 透视设置 ★★★ ======
+local espGroup = Tabs.Main:AddLeftGroupbox("透视", "eye")
+
+espGroup:AddToggle("ESPEnabled", {
+    Text = "启用透视",
+    Default = false,
+    Callback = function(value)
+        Settings.ESPEnabled = value
+        if value then
+            UpdateAllESP()
+        else
+            for userId, data in pairs(espBillboards) do
+                if data.Billboard then
+                    data.Billboard.Enabled = false
+                end
+            end
+        end
+    end
+})
+
+espGroup:AddDivider()
+
+espGroup:AddToggle("ESPShowName", {
+    Text = "显示名字（队伍颜色）",
+    Default = true,
+    Callback = function(value)
+        Settings.ESPShowName = value
+        UpdateESPVisibility()
+    end
+})
+
+espGroup:AddToggle("ESPShowJob", {
+    Text = "显示职业（职业颜色）",
+    Default = true,
+    Callback = function(value)
+        Settings.ESPShowJob = value
+        UpdateESPVisibility()
     end
 })
 
@@ -388,6 +742,11 @@ ThemeManager:ApplyToTab(Tabs.Settings)
 -- ====== 事件与后台任务 ======
 local function onPlayerAdded(player)
     player.CharacterAdded:Connect(function()
+        task.wait(0.5)
+        if Settings.ESPEnabled and player ~= LocalPlayer then
+            CreateESP(player)
+            UpdateESPVisibility()
+        end
         if Settings.HitboxEnabled and not isDestroyed then
             task.wait(0.5)
             ApplyHitbox()
@@ -408,6 +767,11 @@ end
 local playerAddedCon = Players.PlayerAdded:Connect(onPlayerAdded)
 table.insert(connections, playerAddedCon)
 
+local playerRemovedCon = Players.PlayerRemoving:Connect(function(player)
+    RemoveESP(player.UserId)
+end)
+table.insert(connections, playerRemovedCon)
+
 local renderCon = RunService.RenderStepped:Connect(function()
     if isDestroyed then return end
     if Settings.HitboxEnabled then
@@ -419,6 +783,28 @@ local renderCon = RunService.RenderStepped:Connect(function()
     if Settings.NoclipEnabled then
         ApplyNoclip()
     end
+    if Settings.AimEnabled then
+        DoAim()
+    end
+    if Settings.ESPEnabled then
+        for userId, data in pairs(espBillboards) do
+            local player = Players:FindFirstChild(tostring(userId))
+            if player and player.Character then
+                local job = GetPlayerJob(player)
+                if data.NameLabel then
+                    data.NameLabel.Text = player.Name
+                    data.NameLabel.TextColor3 = GetPlayerTeamColor(player)
+                end
+                if data.JobLabel then
+                    data.JobLabel.Text = job
+                    data.JobLabel.TextColor3 = GetJobColor(job)
+                end
+                if data.Billboard then
+                    data.Billboard.Enabled = true
+                end
+            end
+        end
+    end
 end)
 table.insert(connections, renderCon)
 
@@ -427,6 +813,16 @@ task.spawn(function()
         task.wait(10)
         if Settings.WhitelistEnabled and not isDestroyed then
             UpdateWhitelist()
+        end
+        if Settings.ESPEnabled then
+            for _, player in ipairs(Players:GetPlayers()) do
+                if player ~= LocalPlayer and player.Character then
+                    if not espBillboards[player.UserId] then
+                        CreateESP(player)
+                        UpdateESPVisibility()
+                    end
+                end
+            end
         end
     end
 end)
@@ -459,6 +855,16 @@ Library:OnUnload(function()
     if Settings.NoclipEnabled then
         ToggleNoclip(false)
     end
+    for userId, data in pairs(espBillboards) do
+        if data.Billboard then
+            data.Billboard:Destroy()
+        end
+    end
+    espBillboards = {}
+    for _, conn in ipairs(espConnections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    espConnections = {}
     for _, conn in ipairs(connections) do
         pcall(function() conn:Disconnect() end)
     end
