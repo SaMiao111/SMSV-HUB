@@ -385,41 +385,6 @@ SaveManager:SetSubFolder("Configs")
 SaveManager:BuildConfigSection(Tabs.Settings)
 ThemeManager:ApplyToTab(Tabs.Settings)
 
--- ====== 菜单切换按钮 ======
-local menuLabel = Library:AddDraggableLabel("切换菜单")
-menuLabel:AddButton({
-    Text = "点击切换",
-    Func = function()
-        if Library.ToggleKeybind then
-            local key = Library.ToggleKeybind.Value
-            if key then
-                local VirtualInputManager = game:GetService("VirtualInputManager")
-                VirtualInputManager:SendKeyEvent(true, key, false, game)
-                task.wait(0.05)
-                VirtualInputManager:SendKeyEvent(false, key, false, game)
-            end
-        else
-            if Window and Window.Frame then
-                Window.Frame.Visible = not Window.Frame.Visible
-            end
-        end
-    end
-})
-
--- 穿墙状态切换
-local noclipStatusLabel = Library:AddDraggableLabel("穿墙: 关闭")
-noclipStatusLabel:AddButton({
-    Text = "切换",
-    Func = function()
-        Settings.NoclipEnabled = not Settings.NoclipEnabled
-        ToggleNoclip(Settings.NoclipEnabled)
-        noclipStatusLabel:SetText("穿墙: " .. (Settings.NoclipEnabled and "开启" or "关闭"))
-        if Toggles and Toggles.NoclipToggle then
-            Toggles.NoclipToggle:SetValue(Settings.NoclipEnabled)
-        end
-    end
-})
-
 -- ====== 事件与后台任务 ======
 local function onPlayerAdded(player)
     player.CharacterAdded:Connect(function()
